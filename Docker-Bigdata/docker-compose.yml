@@ -1,0 +1,258 @@
+    version: '3.5'
+    services:
+          mysql-db:
+            image: mysql:latest
+            restart: always
+            ports:
+              - "3306:3306"
+            tty: true
+            stdin_open: true
+            privileged: true
+            expose:
+              - 3306   
+            #command: --init-file /data/application/init.sql
+            volumes:
+              - data:/var/lib/mysql
+              #- ./init.sql:/data/application/init.sql
+            environment:
+              MYSQL_ROOT_USER: root
+              MYSQL_ROOT_PASSWORD: secret
+              MYSQL_DATABASE: hue
+              MYSQL_USER: mysqluser
+              MYSQL_PASSWORD: secret
+            container_name: bigdata-cluster-mysql-db
+            networks:
+              - bigdata-cluster-network
+          spark-master:
+            build: ./spark/
+            user: root
+            hostname: spark
+            container_name: spark-master
+            ports:
+              - "8080:8080"
+              - "7077:7077"
+              - "22:22"
+              - "4040:4040"
+              - "8889:8888"
+            volumes:
+               - ./apps:/opt/spark-apps
+               - ./data:/opt/spark-data
+            environment:
+              - SPARK_LOCAL_IP=spark-master
+              - SPARK_WORKLOAD=master
+            command:
+              - "sbin/start-master.sh"
+            networks:
+                - bigdata-cluster-network            
+          spark-worker-a:
+            build: ./spark/
+            user: root            
+            ports:
+              - "9091:8080"
+              - "7000:7000"
+              - "9021:22"
+              - "4041:4040"
+            depends_on:
+              - spark-master
+            environment:
+              - SPARK_MASTER=spark://spark-master:7077
+              - SPARK_WORKER_CORES=1
+              - SPARK_WORKER_MEMORY=1G
+              - SPARK_DRIVER_MEMORY=1G
+              - SPARK_EXECUTOR_MEMORY=1G
+              - SPARK_WORKLOAD=worker
+              - SPARK_LOCAL_IP=spark-worker-a
+            volumes:
+               - ./apps:/opt/spark-apps
+               - ./data:/opt/spark-data
+            command: "sbin/start-worker.sh spark://spark-master:7077"
+            networks:
+                - bigdata-cluster-network            
+          spark-worker-b:
+            build: ./spark/
+            user: root            
+            ports:
+              - "9093:8080"
+              - "7001:7000"
+              - "9022:22"              
+              - "4042:4040"              
+            depends_on:
+              - spark-master
+            environment:
+              - SPARK_MASTER=spark://spark-master:7077
+              - SPARK_WORKER_CORES=1
+              - SPARK_WORKER_MEMORY=1G
+              - SPARK_DRIVER_MEMORY=1G
+              - SPARK_EXECUTOR_MEMORY=1G
+              - SPARK_WORKLOAD=worker
+              - SPARK_LOCAL_IP=spark-worker-b
+            volumes:
+                - ./apps:/opt/spark-apps
+                - ./data:/opt/spark-data
+            command: "sbin/start-worker.sh spark://spark-master:7077"
+            networks:
+                - bigdata-cluster-network            
+          demo-database:
+            image: postgres:11.7-alpine
+            ports: 
+              - "5432:5432"
+            environment: 
+              - POSTGRES_PASSWORD=casa1234
+            networks:
+                - bigdata-cluster-network                     
+          cloudera:
+            image: cloudera/quickstart:latest
+            privileged: true
+            hostname: quickstart.cloudera
+            command: /usr/bin/docker-quickstart
+            #publish-all: true
+            ports:
+              - "8020:8020"   # HDFS 
+              - "8022:22"     # SSH
+              - "7180:7180"   # Cloudera Manager
+              - "8888:8888"   # Hue
+              - "11000:11000" # Oozie
+              - "50072:50070" # HDFS Rest Namenode
+              - "50075:50075" # HDFS Rest Datanode
+              #- "2181:2181"   # Zookeeper
+              - "8089:8088"   # YARN Resource Manager
+              - "19888:19888" # MapReduce Job History
+              - "50030:50030" # MapReduce Job Tracker
+              - "8983:8983"   # Solr
+              - "16000:16000" # Sqoop Metastore
+              - "8042:8042"   # YARN Node Manager
+              - "60010:60010" # HBase Master
+              - "60030:60030" # HBase Region
+              - "9090:9090"   # HBase Thrift
+              - "8098:8080"   # HBase Rest
+              #- "7077:7077"   # Spark Master
+            tty: true
+            stdin_open: true
+            volumes: 
+              - /var/shared_cloudera_quickstart:/media/shared_from_local    
+        # # cassandra:
+            # # image: bitnami/cassandra:latest
+            # # labels:
+                # # kompose.service.type: nodeport
+            # # ports:
+                # # - '7000:7000'
+                # # - '7001:7001'
+                # # - '9042:9042'
+                # # - '9160:9160'
+            # # volumes:
+                # # - data:/bitnami
+        # zeppelin:
+            # image: openkbs/docker-spark-bde2020-zeppelin
+            # container_name: zeppelin
+            # environment:
+                # CORE_CONF_fs_defaultFS: "hdfs://namenode:8020"
+                # SPARK_MASTER: "spark://spark-master:7077"
+                # MASTER: "spark://spark-master:7077"
+                # SPARK_MASTER_URL: "spark://spark-master:7077"
+            # #ZEPPELIN_PORT: 8080
+            # # ZEPPELIN_JAVA_OPTS:
+                # # -Dspark.driver.memory=1g
+                # # -Dspark.executor.memory=2g
+            # ports:
+                # - 19090:8080
+            # #env_file:
+            # #    - ./hadoop-hive.env
+            # volumes:
+                # - /tmp/simple-demo/zeppelin/data:/usr/lib/zeppelin/data:rw
+                # - /tmp/simple-demo/zeppelin/notebook:/usr/lib/zeppelin/notebook:rw
+            # command: /usr/lib/zeppelin/bin/zeppelin.sh
+            # networks:
+                # - bigdata-cluster-network
+        # streamsets:
+            # image: streamsets/datacollector:latest
+            # ports:
+            # - "18630:18630"
+            # network - bigdata-cluster-network
+        # cloudera:
+            # image: gethue/hue:latest
+            # hostname: hue
+            # container_name: hue
+            # dns: 8.8.8.8
+            # ports:
+                # - '8888:8888'
+            # volumes:
+                # - ./hue.ini:/usr/share/hue/desktop/conf/z-hue.ini
+            # depends_on:
+                # - mysql-db
+            # networks:
+                # - bigdata-cluster-network      
+          zookeeper:
+            image: 'bitnami/zookeeper:latest'
+            restart: always
+            ports:
+              - '2181:2181'
+            container_name: bigdata-cluster-zookeeper
+            environment:
+              - ALLOW_ANONYMOUS_LOGIN=yes
+            networks:
+              - bigdata-cluster-network     
+          kafka:
+            image: 'bitnami/kafka:latest'
+            ports:
+              - '9092:9092'
+            environment:
+              - KAFKA_BROKER_ID=1
+              - KAFKA_CFG_LISTENERS=PLAINTEXT://:9092
+              - KAFKA_CFG_ADVERTISED_LISTENERS=PLAINTEXT://127.0.0.1:9092
+              - KAFKA_CFG_ZOOKEEPER_CONNECT=bigdata-cluster-zookeeper:2181
+              - ALLOW_PLAINTEXT_LISTENER=yes
+            container_name: bigdata-cluster-kafka      
+            depends_on:
+              - zookeeper
+            networks:
+              - bigdata-cluster-network      
+          bigdata-cluster-hadoop:
+            build: ./bigdata-cluster-hadoop/
+            restart: always
+            container_name: bigdata-cluster-hadoop
+            command: sh 'start-hadoop-ecosystem.sh'
+            depends_on:
+                - mysql-db
+            ports:
+                - "9024:22"
+                - "9000:9000"
+                - "8088:8088"
+                - "9870:9870"
+                - "10000:10000"
+                - "9999:9999"
+                - "9083:9083"
+                - "10500:10500"
+                - "50070:50070"
+            networks:
+                - bigdata-cluster-network
+          bigdata-cluster-mpp:
+            build: ./bigdata-cluster-mpp/
+            restart: always
+            container_name: bigdata-cluster-mpp
+            command: sh 'start-mpp-ecosystem.sh'
+            ports:
+                - "23:22"
+                - "9094:9092"
+            networks:
+                - bigdata-cluster-network
+          bigdata-cluster-elasticsearch:
+            build: ./bigdata-cluster-elasticsearch/
+            restart: always
+            container_name: bigdata-cluster-elasticsearch
+            command: sh 'start-elasticsearch.sh'
+            ports:
+                - "25:22"
+                - "9200:9200"
+            networks:
+                - bigdata-cluster-network
+    networks:
+        bigdata-cluster-network:
+            name : bigdata-cluster-network    
+    # volumes:
+        # data:
+    volumes:
+      data:
+        driver: local
+# HELPUL
+# dos2unix if shell script failed
+# 
