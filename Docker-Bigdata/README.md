@@ -1,5 +1,5 @@
 # Docker-Bigdata
-
+Some of the sections(services) in docker compose are commented. In order to use these services, please uncomment the lines(f
    ## HADOOP
    ## HIVE
    ## SPARK (STANDALONE)
